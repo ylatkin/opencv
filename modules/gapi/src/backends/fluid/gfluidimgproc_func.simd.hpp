@@ -2767,7 +2767,7 @@ static void run_medblur3x3_reference(T out[], const T *in[], int width, int chan
     const T *p20 = in[2] - shift, *p21 = in[2], *p22 = in[2] + shift;
 
     #pragma clang loop vectorize(enable)
-    for (int l=0; l < length; l++)
+    for (int l = 0; l < length; l++)
     {
         T t00 = p00[l], t01 = p01[l], t02 = p02[l];
         T t10 = p10[l], t11 = p11[l], t12 = p12[l];
@@ -2781,15 +2781,15 @@ static void run_medblur3x3_reference(T out[], const T *in[], int width, int chan
             b = std::max<T>(u, v);
         };
 
-        // horizontal: 3-elements bubble-sort per each row
-        sort(t00, t01);    sort(t01, t02);    sort(t00, t01);
-        sort(t10, t11);    sort(t11, t12);    sort(t10, t11);
-        sort(t20, t21);    sort(t21, t22);    sort(t20, t21);
-
-        // vertical: columns bubble-sort (although partial)
-        sort(t00, t10);    sort(t01, t11);  /*sort(t02, t12);*/
+        // vertical: 3-elements bubble-sort per each column
+        sort(t00, t10);    sort(t01, t11);    sort(t02, t12);
         sort(t10, t20);    sort(t11, t21);    sort(t12, t22);
-      /*sort(t00, t10);*/  sort(t01, t11);    sort(t02, t12);
+        sort(t00, t10);    sort(t01, t11);    sort(t02, t12);
+
+        // horizontal: 3-elements bubble-sort per each row
+        sort(t00, t01);    sort(t01, t02);  /*sort(t00, t01);*/
+        sort(t10, t11);    sort(t11, t12);    sort(t10, t11);
+      /*sort(t20, t21);*/  sort(t21, t22);    sort(t20, t21);
 
         // diagonal: bubble-sort (in opposite order!)
         sort(t11, t02);    sort(t20, t11);    sort(t11, t02);
@@ -2905,7 +2905,7 @@ static void run_medblur3x3_simd(T out[], const T *in[], int width, int chan)
 template<typename T>
 static void run_medblur3x3_code(T out[], const T *in[], int width, int chan)
 {
-#if CV_SIMD
+#if CV_SIMD && false
     int length = width * chan;
 
     // length variable may be unused if types do not match at 'if' statements below

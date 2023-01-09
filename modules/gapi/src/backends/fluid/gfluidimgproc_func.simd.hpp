@@ -2808,59 +2808,96 @@ static void run_medblur3x3_simd(T out[], const T *in[], int width, int chan)
     const int length = width * chan;
     const int shift = border * chan;
 
-    for (int l=0; l < length;)
+    constexpr int nlanes = VT::nlanes;
+
+    int l = 0;
+
+    // main part of output row
+    for (; l + nlanes <= length; l += nlanes)
     {
-        constexpr int nlanes = VT::nlanes;
+        // neighborhood 3x3
+        VT t00, t01, t02;  // row 0, columns 0 1 2
+        VT t10, t11, t12;
+        VT t20, t21, t22;
 
-        // main part of output row
-        for (; l <= length - nlanes; l += nlanes)
+        t00 = vx_load(&in[0][l - shift]);
+        t01 = vx_load(&in[0][l        ]);
+        t02 = vx_load(&in[0][l + shift]);
+
+        t10 = vx_load(&in[1][l - shift]);
+        t11 = vx_load(&in[1][l        ]);
+        t12 = vx_load(&in[1][l + shift]);
+
+        t20 = vx_load(&in[2][l - shift]);
+        t21 = vx_load(&in[2][l        ]);
+        t22 = vx_load(&in[2][l + shift]);
+
+        // sort 2 values (vector)
+        auto vsort = [](VT& a, VT& b)
         {
-            VT t00, t01, t02, t10, t11, t12, t20, t21, t22;
+            VT u = a, v = b;
+            a = v_min(u, v);
+            b = v_max(u, v);
+        };
 
-            // neighbourhood 3x3
+        // vertical: 3-elements bubble-sort per each column
+        vsort(t00, t10);    vsort(t01, t11);    vsort(t02, t12);
+        vsort(t10, t20);    vsort(t11, t21);    vsort(t12, t22);
+        vsort(t00, t10);    vsort(t01, t11);    vsort(t02, t12);
 
-            t00 = vx_load(&in[0][l - shift]);
-            t01 = vx_load(&in[0][l        ]);
-            t02 = vx_load(&in[0][l + shift]);
+        // horizontal: 3-elements bubble-sort per each row
+        vsort(t00, t01);    vsort(t01, t02);  /*vsort(t00, t01);*/
+        vsort(t10, t11);    vsort(t11, t12);    vsort(t10, t11);
+      /*vsort(t20, t21);*/  vsort(t21, t22);    vsort(t20, t21);
 
-            t10 = vx_load(&in[1][l - shift]);
-            t11 = vx_load(&in[1][l        ]);
-            t12 = vx_load(&in[1][l + shift]);
+        // diagonal: bubble-sort (in opposite order!)
+        vsort(t11, t02);    vsort(t20, t11);    vsort(t11, t02);
 
-            t20 = vx_load(&in[2][l - shift]);
-            t21 = vx_load(&in[2][l        ]);
-            t22 = vx_load(&in[2][l + shift]);
+        v_store(&out[l], t11);
+    }
 
-            // sort 2 values
-            auto sort = [](VT& a, VT& b)
-            {
-                VT u=a, v=b;
-                a = v_min(u, v);
-                b = v_max(u, v);
-            };
+    // tail (if any)
+    for (; l < length; l++)
+    {
+        // neighborhood 3x3
+        T t00, t01, t02;  // row 0, columns 0 1 2
+        T t10, t11, t12;
+        T t20, t21, t22;
 
-            // horizontal: 3-elements bubble-sort per each row
-            sort(t00, t01);    sort(t01, t02);    sort(t00, t01);
-            sort(t10, t11);    sort(t11, t12);    sort(t10, t11);
-            sort(t20, t21);    sort(t21, t22);    sort(t20, t21);
+        t00 = in[0][l - shift];
+        t01 = in[0][l        ];
+        t02 = in[0][l + shift];
 
-            // vertical: columns bubble-sort (although partial)
-            sort(t00, t10);    sort(t01, t11);  /*sort(t02, t12);*/
-            sort(t10, t20);    sort(t11, t21);    sort(t12, t22);
-          /*sort(t00, t10);*/  sort(t01, t11);    sort(t02, t12);
+        t10 = in[1][l - shift];
+        t11 = in[1][l        ];
+        t12 = in[1][l + shift];
 
-            // diagonal: bubble-sort (in opposite order!)
-            sort(t11, t02);    sort(t20, t11);    sort(t11, t02);
+        t20 = in[2][l - shift];
+        t21 = in[2][l        ];
+        t22 = in[2][l + shift];
 
-            v_store(&out[l], t11);
-        }
-
-        // tail (if any)
-        if (l < length)
+        // sort 2 values (scalar)
+        auto sort = [](T& a, T& b)
         {
-            GAPI_DbgAssert(length >= nlanes);
-            l = length - nlanes;
-        }
+            T u = a, v = b;
+            a = std::min(u, v);
+            b = std::max(u, v);
+        };
+
+        // vertical: 3-elements bubble-sort per each column
+        sort(t00, t10);    sort(t01, t11);    sort(t02, t12);
+        sort(t10, t20);    sort(t11, t21);    sort(t12, t22);
+        sort(t00, t10);    sort(t01, t11);    sort(t02, t12);
+
+        // horizontal: 3-elements bubble-sort per each row
+        sort(t00, t01);    sort(t01, t02);  /*sort(t00, t01);*/
+        sort(t10, t11);    sort(t11, t12);    sort(t10, t11);
+      /*sort(t20, t21);*/  sort(t21, t22);    sort(t20, t21);
+
+        // diagonal: bubble-sort (in opposite order!)
+        sort(t11, t02);    sort(t20, t11);    sort(t11, t02);
+
+        out[l] = t11;
     }
 }
 #endif
@@ -2868,7 +2905,7 @@ static void run_medblur3x3_simd(T out[], const T *in[], int width, int chan)
 template<typename T>
 static void run_medblur3x3_code(T out[], const T *in[], int width, int chan)
 {
-#if CV_SIMD && false
+#if CV_SIMD
     int length = width * chan;
 
     // length variable may be unused if types do not match at 'if' statements below

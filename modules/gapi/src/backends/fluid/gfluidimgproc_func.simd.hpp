@@ -2796,7 +2796,7 @@ static void run_medblur3x3_reference(T out[], const T *in[], int width, int chan
     }
 }
 
-#if CV_SIMD
+#if CV_SIMD || CV_SIMD_SCALABLE
 template<typename VT, typename T>
 static void run_medblur3x3_simd(T out[], const T *in[], int width, int chan)
 {
@@ -2808,7 +2808,7 @@ static void run_medblur3x3_simd(T out[], const T *in[], int width, int chan)
 
     for (int l=0; l < length;)
     {
-        constexpr int nlanes = VT::nlanes;
+        const int nlanes = VTraits<VT>::vlanes();
 
         // main part of output row
         for (; l <= length - nlanes; l += nlanes)
